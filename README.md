@@ -1,0 +1,309 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+
+const boardSize = 20;
+const initialSnake = [
+  { x: 8, y: 8 },
+  { x: 7, y: 8 },
+  { x: 6, y: 8 },
+];
+const initialFood = { x: 12, y: 8 };
+const directions = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+};
+
+export default function SnakeGame() {
+  const [snake, setSnake] = useState(initialSnake);
+  const [food, setFood] = useState(initialFood);
+  const [direction, setDirection] = useState(directions.ArrowRight);
+  const [isRunning, setIsRunning] = useState(false);
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [speed, setSpeed] = useState(150); // Default speed - lower is faster
+  const [gameOver, setGameOver] = useState(false);
+  const intervalRef = useRef(null);
+  const lastDirectionRef = useRef(directions.ArrowRight);
+
+  // Load high score from local storage on mount
+  useEffect(() => {
+    const savedHighScore = localStorage.getItem("snakeHighScore");
+    if (savedHighScore) {
+      setHighScore(parseInt(savedHighScore, 10));
+    }
+  }, []);
+
+  const randomFood = () => {
+    let newFood;
+    do {
+      newFood = {
+        x: Math.floor(Math.random() * boardSize),
+        y: Math.floor(Math.random() * boardSize),
+      };
+    } while (snake.some((segment) => segment.x === newFood.x && segment.y === newFood.y));
+    return newFood;
+  };
+
+  const moveSnake = () => {
+    const newHead = {
+      x: snake[0].x + direction.x,
+      y: snake[0].y + direction.y,
+    };
+    
+    // Check for collisions
+    const hitWall = 
+      newHead.x < 0 ||
+      newHead.x >= boardSize ||
+      newHead.y < 0 ||
+      newHead.y >= boardSize;
+    
+    const hitSelf = snake.some(
+      (segment) => segment.x === newHead.x && segment.y === newHead.y
+    );
+    
+    if (hitWall || hitSelf) {
+      handleGameOver();
+      return;
+    }
+    
+    const newSnake = [newHead, ...snake];
+    const ateFood = newHead.x === food.x && newHead.y === food.y;
+    
+    if (!ateFood) {
+      newSnake.pop();
+    } else {
+      setScore(score + 1);
+      setFood(randomFood());
+      
+      // Play eating sound effect
+      playSound("eat");
+    }
+    
+    setSnake(newSnake);
+    lastDirectionRef.current = direction;
+  };
+
+  const handleGameOver = () => {
+    setIsRunning(false);
+    setGameOver(true);
+    clearInterval(intervalRef.current);
+    
+    // Play game over sound
+    playSound("gameOver");
+    
+    // Update high score if needed
+    if (score > highScore) {
+      setHighScore(score);
+      localStorage.setItem("snakeHighScore", score.toString());
+    }
+  };
+
+  const resetGame = () => {
+    setSnake(initialSnake);
+    setFood(initialFood);
+    setDirection(directions.ArrowRight);
+    lastDirectionRef.current = directions.ArrowRight;
+    setScore(0);
+    setGameOver(false);
+  };
+
+  const handleDirectionChange = (newDirection) => {
+    // Prevent moving directly opposite of current direction
+    const isOpposite = 
+      (newDirection.x === -lastDirectionRef.current.x && newDirection.y === 0) || 
+      (newDirection.y === -lastDirectionRef.current.y && newDirection.x === 0);
+    
+    if (!isOpposite) {
+      setDirection(newDirection);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (directions[e.key]) {
+      e.preventDefault();
+      handleDirectionChange(directions[e.key]);
+    }
+    
+    // Space bar to toggle game state
+    if (e.key === " ") {
+      e.preventDefault();
+      setIsRunning(prev => !prev);
+    }
+  };
+
+  // Play sound effects (stub function - you'd need to implement actual sounds)
+  const playSound = (soundType) => {
+    // Implement sound playback here if you add audio files
+    console.log(`Playing ${soundType} sound`);
+  };
+
+  const handleSpeedChange = (newSpeed) => {
+    // Convert slider value (1-5) to actual speed (200-50ms)
+    const actualSpeed = 250 - (newSpeed[0] * 40);
+    setSpeed(actualSpeed);
+    
+    // Restart interval with new speed if game is running
+    if (isRunning) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(moveSnake, actualSpeed);
+    }
+  };
+
+  // Set up keyboard controls
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Game loop
+  useEffect(() => {
+    if (isRunning) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(moveSnake, speed);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [isRunning, direction, speed]);
+
+  // Theme color based on current score
+  const getSnakeColor = (segment, index) => {
+    if (index === 0) return "bg-green-400"; // Head
+    // Gradient effect along snake body
+    const gradientPosition = (index / snake.length) * 100;
+    if (gradientPosition < 33) return "bg-green-500";
+    if (gradientPosition < 66) return "bg-green-600";
+    return "bg-green-700";
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+      <h1 className="text-3xl font-bold mb-2">Snake Game</h1>
+      
+      <div className="flex justify-between w-full max-w-md mb-2">
+        <div>
+          <p className="text-lg">Score: {score}</p>
+          <p className="text-sm text-gray-400">High Score: {highScore}</p>
+        </div>
+        <div className="flex items-center">
+          <span className="mr-2 text-sm">Speed:</span>
+          <Slider
+            defaultValue={[3]}
+            min={1}
+            max={5}
+            step={1}
+            disabled={isRunning}
+            onValueChange={handleSpeedChange}
+            className="w-24"
+          />
+        </div>
+      </div>
+      
+      <div className="relative">
+        {gameOver && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10 rounded-lg">
+            <div className="text-center p-4">
+              <h2 className="text-2xl font-bold mb-2">Game Over!</h2>
+              <p>Your score: {score}</p>
+              {score === highScore && score > 0 && (
+                <p className="text-yellow-400 font-bold">New High Score!</p>
+              )}
+              <Button onClick={resetGame} className="mt-3">
+                Play Again
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        <div
+          className="grid bg-gray-800 p-2 rounded-lg"
+          style={{
+            gridTemplateColumns: `repeat(${boardSize}, 1rem)`,
+            gridTemplateRows: `repeat(${boardSize}, 1rem)`,
+            gap: "2px",
+          }}
+        >
+          {[...Array(boardSize * boardSize)].map((_, idx) => {
+            const x = idx % boardSize;
+            const y = Math.floor(idx / boardSize);
+            const snakeIndex = snake.findIndex((seg) => seg.x === x && seg.y === y);
+            const isSnake = snakeIndex !== -1;
+            const isFood = food.x === x && food.y === y;
+            return (
+              <div
+                key={idx}
+                className={`w-4 h-4 rounded-sm ${
+                  isSnake 
+                    ? getSnakeColor(snake[snakeIndex], snakeIndex)
+                    : isFood 
+                      ? "bg-red-500 animate-pulse" 
+                      : "bg-gray-700"
+                }`}
+              ></div>
+            );
+          })}
+        </div>
+      </div>
+      
+      <div className="mt-4 flex gap-3">
+        <Button 
+          onClick={() => setIsRunning(!isRunning)} 
+          className={isRunning ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}
+          disabled={gameOver}
+        >
+          {isRunning ? "Pause" : "Start"}
+        </Button>
+        <Button onClick={resetGame} className="bg-red-600 hover:bg-red-700">
+          Restart
+        </Button>
+      </div>
+      
+      {/* Mobile controls */}
+      <div className="md:hidden mt-4">
+        <div className="grid grid-cols-3 gap-2 w-32 mx-auto">
+          <div></div>
+          <Button 
+            onClick={() => handleDirectionChange(directions.ArrowUp)}
+            className="p-2"
+            disabled={!isRunning}
+          >
+            <ChevronUp size={24} />
+          </Button>
+          <div></div>
+          
+          <Button 
+            onClick={() => handleDirectionChange(directions.ArrowLeft)}
+            className="p-2"
+            disabled={!isRunning}
+          >
+            <ChevronLeft size={24} />
+          </Button>
+          <div></div>
+          <Button 
+            onClick={() => handleDirectionChange(directions.ArrowRight)}
+            className="p-2"
+            disabled={!isRunning}
+          >
+            <ChevronRight size={24} />
+          </Button>
+          
+          <div></div>
+          <Button 
+            onClick={() => handleDirectionChange(directions.ArrowDown)}
+            className="p-2"
+            disabled={!isRunning}
+          >
+            <ChevronDown size={24} />
+          </Button>
+          <div></div>
+        </div>
+      </div>
+      
+      <p className="text-xs text-gray-500 mt-4">
+        Use arrow keys or touch controls to play. Space to pause/resume.
+      </p>
+    </div>
+  );
+}
